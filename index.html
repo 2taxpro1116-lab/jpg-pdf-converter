@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>JPG to PDF 변환기</title>
+    <title>이미지 변환기 - JPG to PDF / PDF to JPG</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -13,23 +14,67 @@
             min-height: 100vh;
             color: #1a1a2e;
         }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 40px 20px;
-        }
-        h1 {
-            text-align: center;
-            font-size: 2rem;
-            margin-bottom: 8px;
-            color: #1a1a2e;
-        }
-        .subtitle {
-            text-align: center;
-            color: #666;
+
+        /* Header */
+        .header {
+            background: #fff;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+            padding: 20px 0;
             margin-bottom: 32px;
-            font-size: 0.95rem;
         }
+        .header-inner {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 0 20px;
+            text-align: center;
+        }
+        .logo {
+            font-size: 1.6rem;
+            font-weight: 800;
+            color: #1a1a2e;
+            margin-bottom: 16px;
+        }
+        .logo span { color: #4361ee; }
+
+        /* Mode Tabs */
+        .mode-tabs {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+        }
+        .mode-tab {
+            padding: 12px 32px;
+            border: 2px solid #ddd;
+            border-radius: 12px;
+            background: #fff;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            color: #666;
+        }
+        .mode-tab:hover { border-color: #aaa; }
+        .mode-tab.active-jpg {
+            border-color: #4361ee;
+            background: #4361ee;
+            color: #fff;
+        }
+        .mode-tab.active-pdf {
+            border-color: #e74c3c;
+            background: #e74c3c;
+            color: #fff;
+        }
+
+        /* Container */
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 0 20px 40px;
+        }
+        .panel { display: none; }
+        .panel.active { display: block; }
+
+        /* Drop Zone */
         .drop-zone {
             border: 2px dashed #bbb;
             border-radius: 16px;
@@ -40,24 +85,16 @@
             background: #fff;
             margin-bottom: 24px;
         }
-        .drop-zone:hover, .drop-zone.dragover {
-            border-color: #4361ee;
-            background: #f0f4ff;
-        }
-        .drop-zone-icon {
-            font-size: 48px;
-            margin-bottom: 12px;
-        }
-        .drop-zone-text {
-            font-size: 1.1rem;
-            color: #555;
-            margin-bottom: 8px;
-        }
-        .drop-zone-hint {
-            font-size: 0.85rem;
-            color: #999;
-        }
+        .drop-zone:hover { border-color: #4361ee; background: #f0f4ff; }
+        .drop-zone.dragover { border-color: #4361ee; background: #f0f4ff; }
+        .drop-zone.pdf-mode:hover { border-color: #e74c3c; background: #fdf2f2; }
+        .drop-zone.pdf-mode.dragover { border-color: #e74c3c; background: #fdf2f2; }
+        .drop-zone-icon { font-size: 48px; margin-bottom: 12px; }
+        .drop-zone-text { font-size: 1.1rem; color: #555; margin-bottom: 8px; }
+        .drop-zone-hint { font-size: 0.85rem; color: #999; }
         .file-input { display: none; }
+
+        /* Preview Grid (JPG to PDF) */
         .preview-grid {
             display: grid;
             grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
@@ -124,6 +161,8 @@
             align-items: center;
             justify-content: center;
         }
+
+        /* Options */
         .options {
             background: #fff;
             border-radius: 12px;
@@ -131,10 +170,7 @@
             margin-bottom: 24px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.06);
         }
-        .options h3 {
-            margin-bottom: 16px;
-            font-size: 1rem;
-        }
+        .options h3 { margin-bottom: 16px; font-size: 1rem; }
         .option-row {
             display: flex;
             align-items: center;
@@ -154,6 +190,15 @@
             font-size: 0.9rem;
             background: #f8f9fa;
         }
+        .page-range-inputs {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .page-range-inputs input[type="number"] { width: 70px; }
+        .page-range-inputs span { color: #888; }
+
+        /* Buttons */
         .btn-convert {
             display: block;
             width: 100%;
@@ -162,40 +207,160 @@
             font-weight: 600;
             border: none;
             border-radius: 12px;
-            background: #4361ee;
             color: #fff;
             cursor: pointer;
             transition: background 0.2s;
         }
-        .btn-convert:hover { background: #3a56d4; }
-        .btn-convert:disabled {
-            background: #ccc;
-            cursor: not-allowed;
+        .btn-convert.blue { background: #4361ee; }
+        .btn-convert.blue:hover { background: #3a56d4; }
+        .btn-convert.red { background: #e74c3c; }
+        .btn-convert.red:hover { background: #c0392b; }
+        .btn-convert:disabled { background: #ccc; cursor: not-allowed; }
+
+        /* File Info (PDF to JPG) */
+        .file-info {
+            background: #fff;
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin-bottom: 24px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            display: none;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .file-info.show { display: flex; }
+        .file-info .name { font-weight: 600; font-size: 0.95rem; }
+        .file-info .detail { font-size: 0.85rem; color: #888; margin-top: 4px; }
+        .file-info .remove-file {
+            background: none;
+            border: none;
+            font-size: 1.4rem;
+            color: #999;
+            cursor: pointer;
+            padding: 4px 8px;
+        }
+        .file-info .remove-file:hover { color: #e74c3c; }
+
+        /* Progress */
+        .progress-bar {
+            width: 100%;
+            height: 6px;
+            background: #eee;
+            border-radius: 3px;
+            margin-top: 16px;
+            overflow: hidden;
+            display: none;
+        }
+        .progress-bar.show { display: block; }
+        .progress-bar .fill {
+            height: 100%;
+            background: #e74c3c;
+            border-radius: 3px;
+            transition: width 0.3s;
+            width: 0%;
         }
         .status {
             text-align: center;
-            margin-top: 16px;
+            margin-top: 12px;
             font-size: 0.9rem;
             color: #666;
         }
         .status.success { color: #2ecc71; font-weight: 600; }
+
+        /* Results (PDF to JPG) */
+        .results { margin-top: 32px; display: none; }
+        .results.show { display: block; }
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+        .results-header h3 { font-size: 1.1rem; }
+        .btn-download-all {
+            padding: 10px 20px;
+            font-size: 0.9rem;
+            font-weight: 600;
+            border: none;
+            border-radius: 10px;
+            background: #2ecc71;
+            color: #fff;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-download-all:hover { background: #27ae60; }
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 16px;
+        }
+        .result-item {
+            background: #fff;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .result-item img {
+            width: 100%;
+            height: 200px;
+            object-fit: contain;
+            background: #fafafa;
+            display: block;
+        }
+        .result-item .info {
+            padding: 10px 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .result-item .page-label { font-size: 0.85rem; color: #555; font-weight: 600; }
+        .result-item .btn-dl {
+            padding: 5px 12px;
+            font-size: 0.8rem;
+            border: none;
+            border-radius: 6px;
+            background: #e74c3c;
+            color: #fff;
+            cursor: pointer;
+        }
+        .result-item .btn-dl:hover { background: #c0392b; }
+
+        /* Footer */
+        .footer {
+            text-align: center;
+            padding: 32px 20px;
+            color: #aaa;
+            font-size: 0.8rem;
+        }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>JPG to PDF 변환기</h1>
-        <p class="subtitle">이미지를 업로드하고 드래그로 순서를 변경한 뒤 PDF로 변환하세요</p>
 
-        <div class="drop-zone" id="dropZone">
+<!-- Header -->
+<div class="header">
+    <div class="header-inner">
+        <div class="logo">IMG<span>Tools</span></div>
+        <div class="mode-tabs">
+            <button class="mode-tab active-jpg" id="tabJpgToPdf" onclick="switchMode('jpg')">JPG to PDF</button>
+            <button class="mode-tab" id="tabPdfToJpg" onclick="switchMode('pdf')">PDF to JPG</button>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+
+    <!-- ========== JPG to PDF ========== -->
+    <div class="panel active" id="panelJpg">
+        <div class="drop-zone" id="dropZoneJpg">
             <div class="drop-zone-icon">🖼️</div>
             <div class="drop-zone-text">이미지를 여기에 드래그하거나 클릭하여 선택</div>
             <div class="drop-zone-hint">JPG, JPEG, PNG 지원 | 여러 장 선택 가능</div>
         </div>
-        <input type="file" class="file-input" id="fileInput" multiple accept="image/jpeg,image/png,image/webp">
+        <input type="file" class="file-input" id="fileInputJpg" multiple accept="image/jpeg,image/png,image/webp">
 
         <div class="preview-grid" id="previewGrid"></div>
 
-        <div class="options" id="options" style="display:none;">
+        <div class="options" id="optionsJpg" style="display:none;">
             <h3>설정</h3>
             <div class="option-row">
                 <label>페이지 크기</label>
@@ -227,177 +392,435 @@
             </div>
         </div>
 
-        <button class="btn-convert" id="convertBtn" disabled>PDF 변환하기</button>
-        <div class="status" id="status"></div>
+        <button class="btn-convert blue" id="convertBtnJpg" disabled>PDF 변환하기</button>
+        <div class="status" id="statusJpg"></div>
     </div>
 
-    <script>
-        const dropZone = document.getElementById('dropZone');
-        const fileInput = document.getElementById('fileInput');
-        const previewGrid = document.getElementById('previewGrid');
-        const options = document.getElementById('options');
-        const convertBtn = document.getElementById('convertBtn');
-        const status = document.getElementById('status');
+    <!-- ========== PDF to JPG ========== -->
+    <div class="panel" id="panelPdf">
+        <div class="drop-zone pdf-mode" id="dropZonePdf">
+            <div class="drop-zone-icon">📄</div>
+            <div class="drop-zone-text">PDF 파일을 여기에 드래그하거나 클릭하여 선택</div>
+            <div class="drop-zone-hint">PDF 파일 1개 선택</div>
+        </div>
+        <input type="file" class="file-input" id="fileInputPdf" accept="application/pdf">
 
-        let files = [];
-        let dragSrcIndex = null;
+        <div class="file-info" id="fileInfo">
+            <div>
+                <div class="name" id="pdfFileName"></div>
+                <div class="detail" id="pdfFileDetail"></div>
+            </div>
+            <button class="remove-file" id="removePdfFile">&times;</button>
+        </div>
 
-        dropZone.addEventListener('click', () => fileInput.click());
-        dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
-        dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-        dropZone.addEventListener('drop', e => {
-            e.preventDefault();
-            dropZone.classList.remove('dragover');
-            addFiles(e.dataTransfer.files);
-        });
-        fileInput.addEventListener('change', () => {
-            addFiles(fileInput.files);
-            fileInput.value = '';
-        });
+        <div class="options" id="optionsPdf" style="display:none;">
+            <h3>설정</h3>
+            <div class="option-row">
+                <label>이미지 품질</label>
+                <select id="scale">
+                    <option value="1">보통 (1x)</option>
+                    <option value="2" selected>높음 (2x)</option>
+                    <option value="3">매우 높음 (3x)</option>
+                </select>
+            </div>
+            <div class="option-row">
+                <label>출력 형식</label>
+                <select id="format">
+                    <option value="jpeg">JPG</option>
+                    <option value="png">PNG</option>
+                </select>
+            </div>
+            <div class="option-row">
+                <label>JPG 품질</label>
+                <select id="jpgQuality">
+                    <option value="1.0">최고 (100%)</option>
+                    <option value="0.92" selected>높음 (92%)</option>
+                    <option value="0.8">중간 (80%)</option>
+                    <option value="0.6">낮음 (60%)</option>
+                </select>
+            </div>
+            <div class="option-row">
+                <label>페이지 범위</label>
+                <select id="rangeType">
+                    <option value="all">전체 페이지</option>
+                    <option value="custom">직접 지정</option>
+                </select>
+            </div>
+            <div class="option-row" id="customRange" style="display:none;">
+                <label></label>
+                <div class="page-range-inputs">
+                    <input type="number" id="pageFrom" min="1" value="1">
+                    <span>~</span>
+                    <input type="number" id="pageTo" min="1" value="1">
+                    <span id="totalPagesHint" style="font-size:0.8rem;color:#999;"></span>
+                </div>
+            </div>
+        </div>
 
-        function addFiles(newFiles) {
-            for (const f of newFiles) {
-                if (f.type.match(/image\/(jpeg|png|webp)/)) {
-                    files.push(f);
-                }
-            }
-            renderPreviews();
+        <button class="btn-convert red" id="convertBtnPdf" disabled>JPG로 변환하기</button>
+        <div class="progress-bar" id="progressBar"><div class="fill" id="progressFill"></div></div>
+        <div class="status" id="statusPdf"></div>
+
+        <div class="results" id="results">
+            <div class="results-header">
+                <h3>변환 결과</h3>
+                <button class="btn-download-all" id="downloadAllBtn">전체 다운로드 (ZIP)</button>
+            </div>
+            <div class="results-grid" id="resultsGrid"></div>
+        </div>
+    </div>
+
+</div>
+
+<div class="footer">IMG Tools - 브라우저에서 바로 변환, 서버 업로드 없음</div>
+
+<script>
+    // ===== Mode Switching =====
+    function switchMode(mode) {
+        const tabJpg = document.getElementById('tabJpgToPdf');
+        const tabPdf = document.getElementById('tabPdfToJpg');
+        const panelJpg = document.getElementById('panelJpg');
+        const panelPdf = document.getElementById('panelPdf');
+
+        if (mode === 'jpg') {
+            tabJpg.className = 'mode-tab active-jpg';
+            tabPdf.className = 'mode-tab';
+            panelJpg.classList.add('active');
+            panelPdf.classList.remove('active');
+        } else {
+            tabPdf.className = 'mode-tab active-pdf';
+            tabJpg.className = 'mode-tab';
+            panelPdf.classList.add('active');
+            panelJpg.classList.remove('active');
         }
+    }
 
-        function renderPreviews() {
-            previewGrid.innerHTML = '';
-            options.style.display = files.length ? 'block' : 'none';
-            convertBtn.disabled = !files.length;
+    // ===== JPG to PDF =====
+    const dropZoneJpg = document.getElementById('dropZoneJpg');
+    const fileInputJpg = document.getElementById('fileInputJpg');
+    const previewGrid = document.getElementById('previewGrid');
+    const optionsJpg = document.getElementById('optionsJpg');
+    const convertBtnJpg = document.getElementById('convertBtnJpg');
+    const statusJpg = document.getElementById('statusJpg');
 
-            files.forEach((f, i) => {
-                const item = document.createElement('div');
-                item.className = 'preview-item';
-                item.draggable = true;
-                item.dataset.index = i;
+    let imgFiles = [];
+    let dragSrcIndex = null;
 
-                const num = document.createElement('div');
-                num.className = 'order-num';
-                num.textContent = i + 1;
+    dropZoneJpg.addEventListener('click', () => fileInputJpg.click());
+    dropZoneJpg.addEventListener('dragover', e => { e.preventDefault(); dropZoneJpg.classList.add('dragover'); });
+    dropZoneJpg.addEventListener('dragleave', () => dropZoneJpg.classList.remove('dragover'));
+    dropZoneJpg.addEventListener('drop', e => {
+        e.preventDefault();
+        dropZoneJpg.classList.remove('dragover');
+        addImgFiles(e.dataTransfer.files);
+    });
+    fileInputJpg.addEventListener('change', () => {
+        addImgFiles(fileInputJpg.files);
+        fileInputJpg.value = '';
+    });
 
-                const img = document.createElement('img');
-                img.src = URL.createObjectURL(f);
+    function addImgFiles(newFiles) {
+        for (const f of newFiles) {
+            if (f.type.match(/image\/(jpeg|png|webp)/)) imgFiles.push(f);
+        }
+        renderPreviews();
+    }
 
-                const name = document.createElement('div');
-                name.className = 'filename';
-                name.textContent = f.name;
+    function renderPreviews() {
+        previewGrid.innerHTML = '';
+        optionsJpg.style.display = imgFiles.length ? 'block' : 'none';
+        convertBtnJpg.disabled = !imgFiles.length;
 
-                const btn = document.createElement('button');
-                btn.className = 'remove-btn';
-                btn.textContent = '×';
-                btn.onclick = e => {
-                    e.stopPropagation();
-                    files.splice(i, 1);
+        imgFiles.forEach((f, i) => {
+            const item = document.createElement('div');
+            item.className = 'preview-item';
+            item.draggable = true;
+
+            const num = document.createElement('div');
+            num.className = 'order-num';
+            num.textContent = i + 1;
+
+            const img = document.createElement('img');
+            img.src = URL.createObjectURL(f);
+
+            const name = document.createElement('div');
+            name.className = 'filename';
+            name.textContent = f.name;
+
+            const btn = document.createElement('button');
+            btn.className = 'remove-btn';
+            btn.textContent = '\u00d7';
+            btn.onclick = e => { e.stopPropagation(); imgFiles.splice(i, 1); renderPreviews(); };
+
+            item.append(num, img, name, btn);
+
+            item.addEventListener('dragstart', () => { dragSrcIndex = i; item.classList.add('dragging'); });
+            item.addEventListener('dragend', () => item.classList.remove('dragging'));
+            item.addEventListener('dragover', e => { e.preventDefault(); item.classList.add('drag-over'); });
+            item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
+            item.addEventListener('drop', e => {
+                e.preventDefault();
+                item.classList.remove('drag-over');
+                if (dragSrcIndex !== null && dragSrcIndex !== i) {
+                    const moved = imgFiles.splice(dragSrcIndex, 1)[0];
+                    imgFiles.splice(i, 0, moved);
                     renderPreviews();
-                };
-
-                item.append(num, img, name, btn);
-
-                item.addEventListener('dragstart', e => {
-                    dragSrcIndex = i;
-                    item.classList.add('dragging');
-                });
-                item.addEventListener('dragend', () => item.classList.remove('dragging'));
-                item.addEventListener('dragover', e => {
-                    e.preventDefault();
-                    item.classList.add('drag-over');
-                });
-                item.addEventListener('dragleave', () => item.classList.remove('drag-over'));
-                item.addEventListener('drop', e => {
-                    e.preventDefault();
-                    item.classList.remove('drag-over');
-                    if (dragSrcIndex !== null && dragSrcIndex !== i) {
-                        const moved = files.splice(dragSrcIndex, 1)[0];
-                        files.splice(i, 0, moved);
-                        renderPreviews();
-                    }
-                });
-
-                previewGrid.appendChild(item);
-            });
-        }
-
-        function loadImage(file) {
-            return new Promise(resolve => {
-                const img = new Image();
-                img.onload = () => resolve(img);
-                img.src = URL.createObjectURL(file);
-            });
-        }
-
-        convertBtn.addEventListener('click', async () => {
-            if (!files.length) return;
-
-            convertBtn.disabled = true;
-            status.textContent = '변환 중...';
-            status.className = 'status';
-
-            try {
-                const { jsPDF } = window.jspdf;
-                const pageSize = document.getElementById('pageSize').value;
-                const orientationPref = document.getElementById('orientation').value;
-                const margin = parseInt(document.getElementById('margin').value) || 0;
-                const quality = parseFloat(document.getElementById('quality').value);
-
-                let doc = null;
-
-                for (let i = 0; i < files.length; i++) {
-                    status.textContent = `변환 중... (${i + 1}/${files.length})`;
-                    const img = await loadImage(files[i]);
-                    const imgW = img.naturalWidth;
-                    const imgH = img.naturalHeight;
-
-                    let orientation;
-                    if (orientationPref === 'auto') {
-                        orientation = imgW > imgH ? 'landscape' : 'portrait';
-                    } else {
-                        orientation = orientationPref;
-                    }
-
-                    if (pageSize === 'fit') {
-                        const pxToMm = 0.264583;
-                        const pw = imgW * pxToMm + margin * 2;
-                        const ph = imgH * pxToMm + margin * 2;
-
-                        if (i === 0) {
-                            doc = new jsPDF({ unit: 'mm', format: [pw, ph] });
-                        } else {
-                            doc.addPage([pw, ph]);
-                        }
-                        doc.addImage(img, 'JPEG', margin, margin, imgW * pxToMm, imgH * pxToMm, undefined, 'FAST', 0, quality);
-                    } else {
-                        if (i === 0) {
-                            doc = new jsPDF({ orientation, unit: 'mm', format: pageSize });
-                        } else {
-                            doc.addPage(pageSize, orientation);
-                        }
-
-                        const pw = doc.internal.pageSize.getWidth() - margin * 2;
-                        const ph = doc.internal.pageSize.getHeight() - margin * 2;
-                        const ratio = Math.min(pw / imgW, ph / imgH);
-                        const w = imgW * ratio;
-                        const h = imgH * ratio;
-                        const x = margin + (pw - w) / 2;
-                        const y = margin + (ph - h) / 2;
-
-                        doc.addImage(img, 'JPEG', x, y, w, h, undefined, 'FAST', 0, quality);
-                    }
                 }
+            });
 
-                doc.save('converted.pdf');
-                status.textContent = 'PDF 변환 완료!';
-                status.className = 'status success';
-            } catch (err) {
-                status.textContent = '오류 발생: ' + err.message;
-                status.className = 'status';
-            }
-
-            convertBtn.disabled = false;
+            previewGrid.appendChild(item);
         });
-    </script>
+    }
+
+    function loadImage(file) {
+        return new Promise(resolve => {
+            const img = new Image();
+            img.onload = () => resolve(img);
+            img.src = URL.createObjectURL(file);
+        });
+    }
+
+    convertBtnJpg.addEventListener('click', async () => {
+        if (!imgFiles.length) return;
+        convertBtnJpg.disabled = true;
+        statusJpg.textContent = '변환 중...';
+        statusJpg.className = 'status';
+
+        try {
+            const { jsPDF } = window.jspdf;
+            const pageSize = document.getElementById('pageSize').value;
+            const orientationPref = document.getElementById('orientation').value;
+            const margin = parseInt(document.getElementById('margin').value) || 0;
+            const quality = parseFloat(document.getElementById('quality').value);
+            let doc = null;
+
+            for (let i = 0; i < imgFiles.length; i++) {
+                statusJpg.textContent = `변환 중... (${i + 1}/${imgFiles.length})`;
+                const img = await loadImage(imgFiles[i]);
+                const imgW = img.naturalWidth, imgH = img.naturalHeight;
+                let orientation = orientationPref === 'auto' ? (imgW > imgH ? 'landscape' : 'portrait') : orientationPref;
+
+                if (pageSize === 'fit') {
+                    const pxToMm = 0.264583;
+                    const pw = imgW * pxToMm + margin * 2, ph = imgH * pxToMm + margin * 2;
+                    if (i === 0) doc = new jsPDF({ unit: 'mm', format: [pw, ph] });
+                    else doc.addPage([pw, ph]);
+                    doc.addImage(img, 'JPEG', margin, margin, imgW * pxToMm, imgH * pxToMm, undefined, 'FAST', 0, quality);
+                } else {
+                    if (i === 0) doc = new jsPDF({ orientation, unit: 'mm', format: pageSize });
+                    else doc.addPage(pageSize, orientation);
+                    const pw = doc.internal.pageSize.getWidth() - margin * 2;
+                    const ph = doc.internal.pageSize.getHeight() - margin * 2;
+                    const ratio = Math.min(pw / imgW, ph / imgH);
+                    const w = imgW * ratio, h = imgH * ratio;
+                    doc.addImage(img, 'JPEG', margin + (pw - w) / 2, margin + (ph - h) / 2, w, h, undefined, 'FAST', 0, quality);
+                }
+            }
+            doc.save('converted.pdf');
+            statusJpg.textContent = 'PDF 변환 완료!';
+            statusJpg.className = 'status success';
+        } catch (err) {
+            statusJpg.textContent = '오류 발생: ' + err.message;
+        }
+        convertBtnJpg.disabled = false;
+    });
+
+    // ===== PDF to JPG =====
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    const dropZonePdf = document.getElementById('dropZonePdf');
+    const fileInputPdf = document.getElementById('fileInputPdf');
+    const fileInfo = document.getElementById('fileInfo');
+    const pdfFileName = document.getElementById('pdfFileName');
+    const pdfFileDetail = document.getElementById('pdfFileDetail');
+    const removePdfFile = document.getElementById('removePdfFile');
+    const optionsPdf = document.getElementById('optionsPdf');
+    const convertBtnPdf = document.getElementById('convertBtnPdf');
+    const progressBar = document.getElementById('progressBar');
+    const progressFill = document.getElementById('progressFill');
+    const statusPdf = document.getElementById('statusPdf');
+    const results = document.getElementById('results');
+    const resultsGrid = document.getElementById('resultsGrid');
+    const downloadAllBtn = document.getElementById('downloadAllBtn');
+    const rangeType = document.getElementById('rangeType');
+    const customRange = document.getElementById('customRange');
+
+    let pdfFile = null, pdfDoc = null, imageBlobs = [];
+
+    dropZonePdf.addEventListener('click', () => fileInputPdf.click());
+    dropZonePdf.addEventListener('dragover', e => { e.preventDefault(); dropZonePdf.classList.add('dragover'); });
+    dropZonePdf.addEventListener('dragleave', () => dropZonePdf.classList.remove('dragover'));
+    dropZonePdf.addEventListener('drop', e => {
+        e.preventDefault();
+        dropZonePdf.classList.remove('dragover');
+        const f = e.dataTransfer.files[0];
+        if (f && f.type === 'application/pdf') loadPDF(f);
+    });
+    fileInputPdf.addEventListener('change', () => {
+        if (fileInputPdf.files[0]) loadPDF(fileInputPdf.files[0]);
+        fileInputPdf.value = '';
+    });
+    removePdfFile.addEventListener('click', resetPdfState);
+    rangeType.addEventListener('change', () => {
+        customRange.style.display = rangeType.value === 'custom' ? 'flex' : 'none';
+    });
+
+    async function loadPDF(file) {
+        pdfFile = file;
+        const arrayBuffer = await file.arrayBuffer();
+        pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        pdfFileName.textContent = file.name;
+        pdfFileDetail.textContent = `${pdfDoc.numPages}페이지 · ${(file.size / 1024 / 1024).toFixed(2)} MB`;
+        fileInfo.classList.add('show');
+        optionsPdf.style.display = 'block';
+        convertBtnPdf.disabled = false;
+        dropZonePdf.style.display = 'none';
+        results.classList.remove('show');
+        document.getElementById('pageTo').value = pdfDoc.numPages;
+        document.getElementById('pageTo').max = pdfDoc.numPages;
+        document.getElementById('pageFrom').max = pdfDoc.numPages;
+        document.getElementById('totalPagesHint').textContent = `(총 ${pdfDoc.numPages}페이지)`;
+    }
+
+    function resetPdfState() {
+        pdfFile = null; pdfDoc = null; imageBlobs = [];
+        fileInfo.classList.remove('show');
+        optionsPdf.style.display = 'none';
+        convertBtnPdf.disabled = true;
+        dropZonePdf.style.display = '';
+        results.classList.remove('show');
+        progressBar.classList.remove('show');
+        statusPdf.textContent = '';
+    }
+
+    convertBtnPdf.addEventListener('click', async () => {
+        if (!pdfDoc) return;
+        const scale = parseFloat(document.getElementById('scale').value);
+        const format = document.getElementById('format').value;
+        const jpgQuality = parseFloat(document.getElementById('jpgQuality').value);
+        let fromPage = 1, toPage = pdfDoc.numPages;
+        if (rangeType.value === 'custom') {
+            fromPage = Math.max(1, parseInt(document.getElementById('pageFrom').value) || 1);
+            toPage = Math.min(pdfDoc.numPages, parseInt(document.getElementById('pageTo').value) || pdfDoc.numPages);
+        }
+
+        convertBtnPdf.disabled = true;
+        progressBar.classList.add('show');
+        results.classList.remove('show');
+        resultsGrid.innerHTML = '';
+        imageBlobs = [];
+        const totalPages = toPage - fromPage + 1;
+
+        for (let i = fromPage; i <= toPage; i++) {
+            statusPdf.textContent = `변환 중... (${i - fromPage + 1}/${totalPages})`;
+            statusPdf.className = 'status';
+            progressFill.style.width = `${((i - fromPage + 1) / totalPages) * 100}%`;
+
+            const page = await pdfDoc.getPage(i);
+            const viewport = page.getViewport({ scale });
+            const canvas = document.createElement('canvas');
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const ctx = canvas.getContext('2d');
+            if (format === 'jpeg') { ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, canvas.width, canvas.height); }
+            await page.render({ canvasContext: ctx, viewport }).promise;
+
+            const mimeType = format === 'png' ? 'image/png' : 'image/jpeg';
+            const blob = await new Promise(resolve => canvas.toBlob(resolve, mimeType, jpgQuality));
+            const url = URL.createObjectURL(blob);
+            const ext = format === 'png' ? 'png' : 'jpg';
+            const baseName = pdfFile.name.replace(/\.pdf$/i, '');
+            imageBlobs.push({ blob, name: `${baseName}_page${i}.${ext}`, url });
+
+            const item = document.createElement('div');
+            item.className = 'result-item';
+            item.innerHTML = `
+                <img src="${url}" alt="Page ${i}">
+                <div class="info">
+                    <span class="page-label">페이지 ${i}</span>
+                    <button class="btn-dl" data-index="${imageBlobs.length - 1}">다운로드</button>
+                </div>`;
+            resultsGrid.appendChild(item);
+        }
+
+        statusPdf.textContent = '변환 완료!';
+        statusPdf.className = 'status success';
+        results.classList.add('show');
+        convertBtnPdf.disabled = false;
+    });
+
+    resultsGrid.addEventListener('click', e => {
+        if (e.target.classList.contains('btn-dl')) downloadBlob(imageBlobs[parseInt(e.target.dataset.index)]);
+    });
+
+    function downloadBlob({ blob, name }) {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = name;
+        a.click();
+    }
+
+    downloadAllBtn.addEventListener('click', async () => {
+        if (imageBlobs.length === 1) { downloadBlob(imageBlobs[0]); return; }
+        downloadAllBtn.textContent = 'ZIP 생성 중...';
+        downloadAllBtn.disabled = true;
+
+        const zipParts = [], centralDir = [];
+        let offset = 0;
+
+        for (const { blob, name } of imageBlobs) {
+            const data = new Uint8Array(await blob.arrayBuffer());
+            const nameBytes = new TextEncoder().encode(name);
+            const header = new Uint8Array(30 + nameBytes.length);
+            const view = new DataView(header.buffer);
+            view.setUint32(0, 0x04034b50, true);
+            view.setUint16(4, 20, true);
+            view.setUint16(8, 0, true);
+            view.setUint32(14, crc32(data), true);
+            view.setUint32(18, data.length, true);
+            view.setUint32(22, data.length, true);
+            view.setUint16(26, nameBytes.length, true);
+            header.set(nameBytes, 30);
+
+            const cdEntry = new Uint8Array(46 + nameBytes.length);
+            const cdView = new DataView(cdEntry.buffer);
+            cdView.setUint32(0, 0x02014b50, true);
+            cdView.setUint16(4, 20, true);
+            cdView.setUint16(6, 20, true);
+            cdView.setUint32(16, crc32(data), true);
+            cdView.setUint32(20, data.length, true);
+            cdView.setUint32(24, data.length, true);
+            cdView.setUint16(28, nameBytes.length, true);
+            cdView.setUint32(42, offset, true);
+            cdEntry.set(nameBytes, 46);
+            centralDir.push(cdEntry);
+
+            zipParts.push(header, data);
+            offset += header.length + data.length;
+        }
+
+        const cdOffset = offset;
+        let cdSize = 0;
+        for (const cd of centralDir) { zipParts.push(cd); cdSize += cd.length; }
+
+        const eocd = new Uint8Array(22);
+        const eocdView = new DataView(eocd.buffer);
+        eocdView.setUint32(0, 0x06054b50, true);
+        eocdView.setUint16(8, imageBlobs.length, true);
+        eocdView.setUint16(10, imageBlobs.length, true);
+        eocdView.setUint32(12, cdSize, true);
+        eocdView.setUint32(16, cdOffset, true);
+        zipParts.push(eocd);
+
+        const baseName = pdfFile.name.replace(/\.pdf$/i, '');
+        downloadBlob({ blob: new Blob(zipParts, { type: 'application/zip' }), name: `${baseName}_images.zip` });
+        downloadAllBtn.textContent = '전체 다운로드 (ZIP)';
+        downloadAllBtn.disabled = false;
+    });
+
+    const crc32Table = new Uint32Array(256);
+    for (let i = 0; i < 256; i++) { let c = i; for (let j = 0; j < 8; j++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1); crc32Table[i] = c; }
+    function crc32(data) { let crc = 0xFFFFFFFF; for (let i = 0; i < data.length; i++) crc = crc32Table[(crc ^ data[i]) & 0xFF] ^ (crc >>> 8); return (crc ^ 0xFFFFFFFF) >>> 0; }
+</script>
 </body>
 </html>
